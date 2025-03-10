@@ -13,7 +13,7 @@ with open("survery_question_model.pkl", "rb") as model_file:
 with open("survery_question_tfidf_vectorizer.pkl", "rb") as vectorizer_file:
     tfidf_vectorizer = pickle.load(vectorizer_file)
 
-@app.route("/predict-health-issue", methods=["POST"])
+@app.route("/survey_question", methods=["POST"])
 def predict_health_issue():
     try:
         # Parse JSON request
