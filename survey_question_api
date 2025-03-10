@@ -6,21 +6,25 @@ import joblib
 app = Flask(__name__)
 
 # Load the trained ML model
-with open("survey_question_model.pkl", "rb") as model_file:
+with open("survery_question_model.pkl", "rb") as model_file:
     model = pickle.load(model_file)
 
 # Load the trained TF-IDF vectorizer for symptom text processing
-with open("tfidf_vectorizer.pkl", "rb") as vectorizer_file:
+with open("survery_question_tfidf_vectorizer.pkl", "rb") as vectorizer_file:
     tfidf_vectorizer = pickle.load(vectorizer_file)
 
-@app.route("/predict-survey-question", methods=["POST"])
-def predict_survey_question():
+@app.route("/predict-health-issue", methods=["POST"])
+def predict_health_issue():
     try:
         # Parse JSON request
         data = request.get_json()
 
         # Required fields
-        required_fields = ["symptoms", "stress", "sleep", "energy", "symptom_worsening", "diet", "exercise", "medications", "smoking"]
+        required_fields = [
+            "symptoms", "stress", "sleep", "energy", 
+            "symptom_worsening", "diet", "exercise", 
+            "medications", "smoking"
+        ]
         for field in required_fields:
             if field not in data:
                 return jsonify({"error": f"Missing field: {field}"}), 400
@@ -30,29 +34,40 @@ def predict_survey_question():
         exercise_mapping = {"none": 0, "light": 1, "moderate": 2, "intense": 3}
         symptom_worsening_mapping = {"no_change": 0, "worsening": 1, "improving": 2}
 
+        # Validate categorical inputs
+        if data["diet"].lower() not in diet_mapping:
+            return jsonify({"error": f"Invalid diet value: {data['diet']}"}), 400
+        if data["exercise"].lower() not in exercise_mapping:
+            return jsonify({"error": f"Invalid exercise value: {data['exercise']}"}), 400
+        if data["symptom_worsening"].lower() not in symptom_worsening_mapping:
+            return jsonify({"error": f"Invalid symptom_worsening value: {data['symptom_worsening']}"}), 400
+
         # Convert symptoms to numerical using TF-IDF
         symptoms_text = [data["symptoms"]]  # TF-IDF expects a list of texts
         symptoms_features = tfidf_vectorizer.transform(symptoms_text).toarray()
 
         # Convert other inputs to numerical format
-        other_features = np.array([
-            int(data["stress"]),
-            int(data["sleep"]),
-            int(data["energy"]),
-            symptom_worsening_mapping.get(data["symptom_worsening"].lower(), 0),
-            diet_mapping.get(data["diet"].lower(), 0),
-            exercise_mapping.get(data["exercise"].lower(), 0),
-            int(data["medications"]),
-            int(data["smoking"])
-        ]).reshape(1, -1)
+        try:
+            other_features = np.array([
+                int(data["stress"]),
+                int(data["sleep"]),
+                int(data["energy"]),
+                symptom_worsening_mapping[data["symptom_worsening"].lower()],
+                diet_mapping[data["diet"].lower()],
+                exercise_mapping[data["exercise"].lower()],
+                int(data["medications"]),
+                int(data["smoking"])
+            ]).reshape(1, -1)
+        except ValueError:
+            return jsonify({"error": "Invalid numerical value in input data"}), 400
 
         # Combine all features (symptoms + other health factors)
         input_features = np.hstack((symptoms_features, other_features))
 
-        # Predict the next survey question
-        predicted_question = model.predict(input_features)[0]
+        # Predict the health issue
+        predicted_health_issue = model.predict(input_features)[0]
 
-        return jsonify({"next_survey_question": predicted_question})
+        return jsonify({"predicted_health_issue": predicted_health_issue})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
