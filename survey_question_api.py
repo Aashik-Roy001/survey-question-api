@@ -12,8 +12,8 @@ with open("survey_question_model.pkl", "rb") as model_file:
     model = pickle.load(model_file)
 
 # Load the trained TF-IDF vectorizer for symptom text processing
-with open("tfidf_vectorizer.pkl", "rb") as vectorizer_file:
-    tfidf_vectorizer = pickle.load(vectorizer_file)
+
+tfidf_vectorizer = joblib.load("tfidf_vectorizer.pkl")
 
 # Home Page
 @app.route("/")
