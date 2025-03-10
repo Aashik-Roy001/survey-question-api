@@ -1,5 +1,6 @@
 import os
 from flask import Flask, request, jsonify
+
 import pickle
 import numpy as np
 import joblib
@@ -13,6 +14,11 @@ with open("survey_question_model.pkl", "rb") as model_file:
 # Load the trained TF-IDF vectorizer for symptom text processing
 with open("tfidf_vectorizer.pkl", "rb") as vectorizer_file:
     tfidf_vectorizer = pickle.load(vectorizer_file)
+
+# Home Page
+@app.route("/")
+def home():
+    return jsonify({"message": "Welcome to the Survey Question Prediction API!"})
 
 @app.route("/survey_question", methods=["POST"])
 def predict_survey_question():
@@ -61,4 +67,3 @@ def predict_survey_question():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))  # Use dynamic port
     app.run(host="0.0.0.0", port=port)
-
