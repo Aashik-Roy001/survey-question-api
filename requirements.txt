@@ -1,6 +1,8 @@
-flask
-numpy==1.24.3
-pandas==1.5.3
-scikit-learn==1.2.2
-joblib==1.2.0
-gunicorn
+fastapi
+uvicorn
+tensorflow==2.18.0
+numpy==1.26.4
+pandas==2.2.2
+scikit-learn==1.6.1
+pydantic==2.10.6
+pickle-mixin
