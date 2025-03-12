@@ -10,25 +10,24 @@ PREPROCESSING_PATH = "preprocessing.pkl"
 
 model = tf.keras.models.load_model(MODEL_PATH)
 
-# ✅ Load preprocessing objects (OneHotEncoder, LabelEncoders & Scaler)
+# ✅ Load preprocessing objects (LabelEncoders & Scaler)
 with open(PREPROCESSING_PATH, "rb") as f:
     preprocessors = pickle.load(f)
 
-onehot_encoder = preprocessors["onehot_encoder"]
-label_encoders = preprocessors["label_encoders"]
-scaler = preprocessors["scaler"]
-target_encoder = preprocessors["target_encoder"]
+label_encoders = preprocessors.get("label_encoders", {})  # Default to empty dict
+scaler = preprocessors.get("scaler", None)
+target_encoder = preprocessors.get("target_encoder", None)
 
 # ✅ FastAPI app instance
 app = FastAPI()
 
 # ✅ Define request model
 class SurveyAnalysisRequest(BaseModel):
-    userId: str = None  # userId is null in request
+    userId: str = None
     recentResponses: list
     selectedHealthIssue: str
     selectedSymptom: str
-    dynamicUserDetails: dict  # Only changing details
+    dynamicUserDetails: dict
 
 # ✅ Define response model
 class SurveyAnalysisResponse(BaseModel):
@@ -40,34 +39,26 @@ class SurveyAnalysisResponse(BaseModel):
 def home():
     return {"message": "Survey Analysis API is running!"}
 
-# ✅ Function to process input data
+# ✅ Process input data function
 def process_input_data(request):
     try:
-        # 🔹 Extract numerical features
-        numerical_features = [
-            request.dynamicUserDetails.get("age", 30),  # Default age if missing
-            request.dynamicUserDetails.get("weight", 70),
-            request.dynamicUserDetails.get("height", 175),
-            request.dynamicUserDetails.get("energy_level", 3)
-        ]
+        features = []
+        # 🔸 Encode categorical features (if present)
+        for col in ["Diet", "Exercise", "Symptom Trend"]:
+            if col in request.dynamicUserDetails and col in label_encoders:
+                features.append(label_encoders[col].transform([request.dynamicUserDetails[col]])[0])
+            else:
+                features.append(0)  # Default if missing
 
-        # 🔸 Extract categorical values for one-hot encoding
-        categorical_values = [[
-            request.dynamicUserDetails.get("diet", "Balanced"),
-            request.dynamicUserDetails.get("exercise", "Regular"),
-            request.dynamicUserDetails.get("symptom_trend", "Stable")
-        ]]
+        # 🔸 Encode binary & numeric features
+        for key in ["Weight Change", "Smoke/Alcohol", "Medications", "Stress", "Sleep Issues", "Energy Level", "Symptom Worsening", "Consulted Doctor"]:
+            features.append(request.dynamicUserDetails.get(key, 0))
 
-        # 🔸 Apply one-hot encoding
-        encoded_categorical = onehot_encoder.transform(categorical_values)
+        # 🔸 Scale features
+        if scaler:
+            features = scaler.transform([features])
 
-        # 🔸 Combine numerical and categorical features
-        final_features = np.concatenate([numerical_features, encoded_categorical[0]])
-
-        # 🔸 Scale the combined features
-        final_features = scaler.transform([final_features])
-
-        return final_features
+        return np.array(features)
 
     except Exception as e:
         print("⚠️ Error in feature processing:", str(e))
@@ -77,16 +68,14 @@ def process_input_data(request):
 @app.post("/survey_question")
 def predict_survey_question(request: SurveyAnalysisRequest):
     try:
-        # ✅ Process input data
         processed_data = process_input_data(request)
-
         if processed_data is None:
             raise HTTPException(status_code=400, detail="Failed to preprocess input data")
 
         # ✅ Make prediction
         prediction = model.predict(processed_data)
         predicted_index = np.argmax(prediction)
-        predicted_health_issue = target_encoder.inverse_transform([predicted_index])[0]
+        predicted_health_issue = target_encoder.inverse_transform([predicted_index])[0] if target_encoder else "Unknown"
 
         # ✅ Generate AI-selected survey question
         question = f"How has your {request.selectedSymptom} changed recently?"
