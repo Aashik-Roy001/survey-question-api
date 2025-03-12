@@ -6,6 +6,17 @@ import pickle
 import json
 import logging
 
+# ✅ Define health issues with common symptoms
+HEALTH_ISSUES = {
+    "Diabetes": ["Frequent urination", "Excessive thirst", "Blurred vision", "Fatigue"],
+    "Hypertension": ["High Blood Pressure", "Dizziness", "Shortness of breath", "Nosebleeds"],
+    "Skin Irritation": ["Rashes", "Itching", "Dry skin"],
+    "Obesity": ["Excessive weight gain", "Joint pain", "Breathlessness"],
+    "Digestive Issues": ["Abdominal pain", "Bloating", "Constipation", "Heartburn"],
+    "Arthritis": ["Joint stiffness", "Swelling", "Painful joints"],
+    "Asthma": ["Wheezing", "Coughing", "Chest tightness"],
+    "Migraine": ["Severe headache", "Nausea", "Sensitivity to light"]
+}
 
 # ✅ Load the trained model
 MODEL_PATH = "survey_model.h5"
@@ -85,7 +96,6 @@ def process_input_data(request):
     except Exception as e:
         print(f"⚠️ Error in feature processing: {str(e)}")
         return None
-
 
 # ✅ Predict route
 logging.basicConfig(level=logging.INFO)
