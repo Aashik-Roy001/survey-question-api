@@ -10,10 +10,11 @@ PREPROCESSING_PATH = "preprocessing.pkl"
 
 model = tf.keras.models.load_model(MODEL_PATH)
 
-# ✅ Load preprocessing objects (LabelEncoders & Scaler)
+# ✅ Load preprocessing objects (OneHotEncoder, LabelEncoders & Scaler)
 with open(PREPROCESSING_PATH, "rb") as f:
     preprocessors = pickle.load(f)
 
+onehot_encoder = preprocessors["onehot_encoder"]
 label_encoders = preprocessors["label_encoders"]
 scaler = preprocessors["scaler"]
 target_encoder = preprocessors["target_encoder"]
@@ -39,39 +40,59 @@ class SurveyAnalysisResponse(BaseModel):
 def home():
     return {"message": "Survey Analysis API is running!"}
 
+# ✅ Function to process input data
+def process_input_data(request):
+    try:
+        # 🔹 Extract numerical features
+        numerical_features = [
+            request.dynamicUserDetails.get("age", 30),  # Default age if missing
+            request.dynamicUserDetails.get("weight", 70),
+            request.dynamicUserDetails.get("height", 175),
+            request.dynamicUserDetails.get("energy_level", 3)
+        ]
+
+        # 🔸 Extract categorical values for one-hot encoding
+        categorical_values = [[
+            request.dynamicUserDetails.get("diet", "Balanced"),
+            request.dynamicUserDetails.get("exercise", "Regular"),
+            request.dynamicUserDetails.get("symptom_trend", "Stable")
+        ]]
+
+        # 🔸 Apply one-hot encoding
+        encoded_categorical = onehot_encoder.transform(categorical_values)
+
+        # 🔸 Combine numerical and categorical features
+        final_features = np.concatenate([numerical_features, encoded_categorical[0]])
+
+        # 🔸 Scale the combined features
+        final_features = scaler.transform([final_features])
+
+        return final_features
+
+    except Exception as e:
+        print("⚠️ Error in feature processing:", str(e))
+        return None
+
 # ✅ Predict route
 @app.post("/survey_question")
 def predict_survey_question(request: SurveyAnalysisRequest):
     try:
-        # 🔹 Convert request data into feature array
-        features = []
+        # ✅ Process input data
+        processed_data = process_input_data(request)
 
-        # 🔸 Encode categorical features
-        for col in ["Diet", "Exercise", "Symptom Trend"]:
-            if col in request.dynamicUserDetails:
-                features.append(label_encoders[col].transform([request.dynamicUserDetails[col]])[0])
-            else:
-                features.append(0)  # Default if missing
+        if processed_data is None:
+            raise HTTPException(status_code=400, detail="Failed to preprocess input data")
 
-        # 🔸 Encode binary & numeric features
-        binary_numeric_keys = ["Weight Change", "Smoke/Alcohol", "Medications", "Stress", "Sleep Issues", "Energy Level", "Symptom Worsening", "Consulted Doctor"]
-        for key in binary_numeric_keys:
-            features.append(request.dynamicUserDetails.get(key, 0))  # Default to 0 if missing
-
-        # 🔸 Scale features
-        features = np.array(features).reshape(1, -1)
-        features = scaler.transform(features)
-
-        # 🔹 Make prediction
-        prediction = model.predict(features)
+        # ✅ Make prediction
+        prediction = model.predict(processed_data)
         predicted_index = np.argmax(prediction)
         predicted_health_issue = target_encoder.inverse_transform([predicted_index])[0]
 
-        # 🔥 Generate AI-selected survey question
+        # ✅ Generate AI-selected survey question
         question = f"How has your {request.selectedSymptom} changed recently?"
         trigger_severity_analysis = predicted_health_issue in ["Diabetes", "Hypertension", "Asthma"]
 
         return SurveyAnalysisResponse(question=question, triggerSeverityAnalysis=trigger_severity_analysis)
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
