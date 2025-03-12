@@ -3,6 +3,9 @@ from pydantic import BaseModel
 import tensorflow as tf
 import numpy as np
 import pickle
+import json
+import logging
+
 
 # ✅ Load the trained model
 MODEL_PATH = "survey_model.h5"
@@ -43,34 +46,47 @@ def home():
 def process_input_data(request):
     try:
         features = []
-        # 🔸 Encode categorical features (if present)
+        
+        # 🔹 Encode categorical features safely
         for col in ["Diet", "Exercise", "Symptom Trend"]:
-            if col in request.dynamicUserDetails and col in label_encoders:
-                features.append(label_encoders[col].transform([request.dynamicUserDetails[col]])[0])
+            value = request.dynamicUserDetails.get(col, "Unknown")  # Default to "Unknown"
+            if value in label_encoders[col].classes_:
+                features.append(label_encoders[col].transform([value])[0])
             else:
-                features.append(0)  # Default if missing
-
-        # 🔸 Encode binary & numeric features
-        for key in ["Weight Change", "Smoke/Alcohol", "Medications", "Stress", "Sleep Issues", "Energy Level", "Symptom Worsening", "Consulted Doctor"]:
-            features.append(request.dynamicUserDetails.get(key, 0))
-
-        # 🔸 Scale features
+                features.append(0)  # Default category if unseen
+            
+        # 🔹 Encode numeric and binary features
+        numeric_keys = [
+            "Weight Change", "Smoke/Alcohol", "Medications", "Stress", 
+            "Sleep Issues", "Energy Level", "Symptom Worsening", "Consulted Doctor"
+        ]
+        
+        for key in numeric_keys:
+            features.append(request.dynamicUserDetails.get(key, 0))  # Default to 0 if missing
+        
+        # 🔹 Convert to NumPy array and scale
+        features = np.array(features).reshape(1, -1)
         if scaler:
-            features = scaler.transform([features])
+            features = scaler.transform(features)
 
-        return np.array(features)
+        return features
 
     except Exception as e:
-        print("⚠️ Error in feature processing:", str(e))
+        print(f"⚠️ Error in feature processing: {str(e)}")
         return None
 
+
 # ✅ Predict route
+logging.basicConfig(level=logging.INFO)
+
 @app.post("/survey_question")
 def predict_survey_question(request: SurveyAnalysisRequest):
     try:
+        logging.info(f"📥 Received Input: {json.dumps(request.dict(), indent=2)}")
+
         processed_data = process_input_data(request)
         if processed_data is None:
-            raise HTTPException(status_code=400, detail="Failed to preprocess input data")
+            raise HTTPException(status_code=400, detail="400: Failed to preprocess input data")
 
         # ✅ Make prediction
         prediction = model.predict(processed_data)
@@ -81,7 +97,10 @@ def predict_survey_question(request: SurveyAnalysisRequest):
         question = f"How has your {request.selectedSymptom} changed recently?"
         trigger_severity_analysis = predicted_health_issue in ["Diabetes", "Hypertension", "Asthma"]
 
+        logging.info(f"📤 Predicted: {predicted_health_issue}, Question: {question}")
+
         return SurveyAnalysisResponse(question=question, triggerSeverityAnalysis=trigger_severity_analysis)
 
     except Exception as e:
+        logging.error(f"❌ Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
