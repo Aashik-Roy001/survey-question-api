@@ -46,15 +46,25 @@ def home():
 def process_input_data(request):
     try:
         features = []
+
+        # 🔹 One-hot encode symptoms (38 total features)
+        all_symptoms = sum(HEALTH_ISSUES.values(), [])  # Get full symptom list
+        symptom_dict = {symptom: 0 for symptom in all_symptoms}  # Default all to 0
         
+        # Set selected symptom to 1 if it's in the list
+        if request.selectedSymptom in symptom_dict:
+            symptom_dict[request.selectedSymptom] = 1
+        
+        features.extend(symptom_dict.values())  # Append one-hot symptom encoding
+
         # 🔹 Encode categorical features safely
         for col in ["Diet", "Exercise", "Symptom Trend"]:
-            value = request.dynamicUserDetails.get(col, "Unknown")  # Default to "Unknown"
+            value = request.dynamicUserDetails.get(col, "Unknown")  # Default "Unknown"
             if value in label_encoders[col].classes_:
                 features.append(label_encoders[col].transform([value])[0])
             else:
-                features.append(0)  # Default category if unseen
-            
+                features.append(0)  # Default to category 0
+
         # 🔹 Encode numeric and binary features
         numeric_keys = [
             "Weight Change", "Smoke/Alcohol", "Medications", "Stress", 
@@ -62,13 +72,14 @@ def process_input_data(request):
         ]
         
         for key in numeric_keys:
-            features.append(request.dynamicUserDetails.get(key, 0))  # Default to 0 if missing
+            features.append(request.dynamicUserDetails.get(key, 0))  # Default 0
         
         # 🔹 Convert to NumPy array and scale
         features = np.array(features).reshape(1, -1)
         if scaler:
             features = scaler.transform(features)
 
+        print(f"✅ Processed Features: {features.shape}")  # Debugging
         return features
 
     except Exception as e:
